@@ -33,6 +33,10 @@ export interface PlaygroundTooltipMessages {
   print: string
   openInNewTab: string
   download: string
+  template: string
+  source: string
+  pdf: string
+  compiling: string
 }
 
 /**
@@ -63,5 +67,9 @@ export const DEFAULT_PLAYGROUND_MESSAGES: PlaygroundMessages = {
     print: 'Print',
     openInNewTab: 'Open in New Tab',
     download: 'Download',
+    template: 'Template',
+    source: 'Source',
+    pdf: 'PDF',
+    compiling: 'Compiling PDF...',
   },
 }

@@ -51,6 +51,14 @@ export interface PlaygroundProps {
   filename?: string
   /** Optional localized UI messages for tooltip labels. */
   messages?: PlaygroundMessageOverrides
+  /**
+   * Compiles LaTeX source to PDF bytes.
+   *
+   * Providing this adds a Source/PDF toggle to `latex` layouts so the compiled
+   * document can be previewed. Leave it out when no LaTeX toolchain is
+   * available, and the TeX source view is shown.
+   */
+  compileLatex?: (tex: string) => Promise<Uint8Array>
 }
 
 /**
@@ -68,6 +76,7 @@ export function Playground({
   onChange,
   filename,
   messages,
+  compileLatex,
 }: PlaygroundProps) {
   const {
     yaml: currentYaml,
@@ -102,6 +111,9 @@ export function Playground({
       setActiveLayoutIndex={setActiveLayoutIndex}
       resume={resume}
       filename={filename}
+      yaml={currentYaml}
+      onYamlChange={handleYamlChange}
+      compileLatex={compileLatex}
       tooltips={tooltips}
     />
   )

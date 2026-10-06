@@ -27,7 +27,7 @@ import {
   IconExternalLink,
   IconPrinter,
 } from '@tabler/icons-react'
-import type { Resume } from '@yamlresume/core'
+import type { LayoutEngine, Resume } from '@yamlresume/core'
 import { useCallback, useMemo } from 'react'
 
 import {
@@ -44,14 +44,17 @@ import {
   copyResumeToClipboard,
   downloadResume,
   getBasename,
+  getLayoutTemplate,
   openResumeInNewTab,
   printResume,
+  setLayoutTemplate,
 } from '@/utils'
 
 import { PreviewNoLayouts } from './PreviewNoLayouts'
 import { PreviewTab } from './PreviewTab'
 import { PreviewTabs } from './PreviewTabs'
 import { ResumeViewer } from './ResumeViewer'
+import { TemplateSelector } from './TemplateSelector'
 
 /**
  * Props for the PreviewPanel component.
@@ -63,12 +66,28 @@ export interface PreviewPanelProps {
   filename?: string
   /** The parsed resume object. */
   resume: Resume | null
+  /** The YAML source backing the editor, used to rewrite template values. */
+  yaml: string
+  /** Callback invoked with new YAML when a template selection changes. */
+  onYamlChange: (yaml: string) => void
+  /**
+   * Compiles LaTeX source to PDF bytes, enabling the rendered PDF preview for
+   * `latex` layouts.
+   */
+  compileLatex?: (tex: string) => Promise<Uint8Array>
   /** Callback to change the active layout index. */
   setActiveLayoutIndex: (index: number) => void
   /** Localized tooltip labels for preview actions. */
   tooltips: Pick<
     PlaygroundTooltipMessages,
-    'copy' | 'print' | 'openInNewTab' | 'download'
+    | 'copy'
+    | 'print'
+    | 'openInNewTab'
+    | 'download'
+    | 'template'
+    | 'source'
+    | 'pdf'
+    | 'compiling'
   >
 }
 
@@ -80,10 +99,13 @@ export interface PreviewPanelProps {
  */
 export function PreviewPanel({
   activeLayoutIndex,
+  compileLatex,
   filename,
+  onYamlChange,
   resume,
   setActiveLayoutIndex,
   tooltips,
+  yaml,
 }: PreviewPanelProps) {
   // Filter out invalid layouts (null or missing engine property)
   // This can happen when user is typing incomplete YAML like "- " in layouts array
@@ -116,6 +138,17 @@ export function PreviewPanel({
     downloadResume(resume, activeLayoutIndex)
   }, [resume, activeLayoutIndex])
 
+  // Switching templates edits the YAML in place so the editor, the preview and
+  // any external onChange consumer all observe the same source.
+  const handleTemplateChange = useCallback(
+    (template: string) => {
+      onYamlChange(setLayoutTemplate(yaml, activeLayoutIndex, template))
+    },
+    [activeLayoutIndex, onYamlChange, yaml]
+  )
+
+  const activeLayout = resume?.layouts?.[activeLayoutIndex]
+
   if (validLayouts.length === 0) {
     return (
       <Panel>
@@ -140,6 +173,14 @@ export function PreviewPanel({
             />
           ))}
         </PreviewTabs>
+        <TemplateSelector
+          current={getLayoutTemplate(activeLayout)}
+          layoutIndex={activeLayoutIndex}
+          engine={activeLayout?.engine as LayoutEngine | undefined}
+          onChange={handleTemplateChange}
+          yaml={yaml}
+          label={tooltips.template}
+        />
         <div className="flex-1" />
         <div className="flex min-w-fit items-center gap-0.5 pr-2">
           <ToolbarCopyButton onClick={handleCopy} title={tooltips.copy} />
@@ -167,7 +208,16 @@ export function PreviewPanel({
         </div>
       </PanelToolbar>
       <PanelContent>
-        <ResumeViewer resume={resume} layoutIndex={activeLayoutIndex} />
+        <ResumeViewer
+          resume={resume}
+          layoutIndex={activeLayoutIndex}
+          compileLatex={compileLatex}
+          tooltips={{
+            source: tooltips.source,
+            pdf: tooltips.pdf,
+            compiling: tooltips.compiling,
+          }}
+        />
       </PanelContent>
     </Panel>
   )

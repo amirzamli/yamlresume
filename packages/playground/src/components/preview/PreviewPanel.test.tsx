@@ -62,6 +62,10 @@ describe(PreviewPanel, () => {
     print: 'Print',
     openInNewTab: 'Open in New Tab',
     download: 'Download',
+    template: 'Template',
+    source: 'Source',
+    pdf: 'PDF',
+    compiling: 'Compiling PDF...',
   }
 
   const layouts = [
@@ -86,6 +90,8 @@ describe(PreviewPanel, () => {
         setActiveLayoutIndex={vi.fn()}
         resume={resumeWithLayouts}
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
 
@@ -107,6 +113,8 @@ describe(PreviewPanel, () => {
         setActiveLayoutIndex={setActiveLayoutIndex}
         resume={resumeWithLayouts}
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
 
@@ -123,6 +131,8 @@ describe(PreviewPanel, () => {
         setActiveLayoutIndex={vi.fn()}
         resume={resumeWithLayouts}
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
 
@@ -140,6 +150,8 @@ describe(PreviewPanel, () => {
         setActiveLayoutIndex={vi.fn()}
         resume={resumeWithLayouts}
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
 
@@ -167,6 +179,8 @@ describe(PreviewPanel, () => {
         setActiveLayoutIndex={vi.fn()}
         resume={resumeEmpty}
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
 
@@ -182,6 +196,8 @@ describe(PreviewPanel, () => {
         setActiveLayoutIndex={vi.fn()}
         resume={resumeInvalid}
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
     expect(screen.getByText('No Layouts Defined')).toBeDefined()
@@ -197,6 +213,8 @@ describe(PreviewPanel, () => {
         resume={resumeWithLayouts}
         filename="/path/to/john-doe.yml"
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
 
@@ -214,9 +232,94 @@ describe(PreviewPanel, () => {
         resume={resumeWithLayouts}
         filename=".yaml"
         tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
       />
     )
     // Should fallback to 'resume'
     expect(screen.getByTitle('resume.0.html')).toBeDefined()
+  })
+
+  it('shows the template selector for the active layout engine', () => {
+    const resumeWithLayouts = {
+      ...mockResume,
+      layouts: [
+        { engine: 'html', template: 'calm' },
+        { engine: 'markdown' },
+        { engine: 'latex', template: 'moderncv-banking' },
+      ],
+    } as unknown as Resume
+
+    const { rerender } = render(
+      <PreviewPanel
+        activeLayoutIndex={0}
+        setActiveLayoutIndex={vi.fn()}
+        resume={resumeWithLayouts}
+        tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
+      />
+    )
+
+    const select = screen.getByLabelText('Template') as HTMLSelectElement
+    expect(select.value).toBe('calm')
+
+    // Switching to the markdown layout hides the selector entirely.
+    rerender(
+      <PreviewPanel
+        activeLayoutIndex={1}
+        setActiveLayoutIndex={vi.fn()}
+        resume={resumeWithLayouts}
+        tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
+      />
+    )
+
+    expect(screen.queryByLabelText('Template')).toBeNull()
+
+    // The LaTeX layout gets the LaTeX template list.
+    rerender(
+      <PreviewPanel
+        activeLayoutIndex={2}
+        setActiveLayoutIndex={vi.fn()}
+        resume={resumeWithLayouts}
+        tooltips={tooltips}
+        yaml=""
+        onYamlChange={vi.fn()}
+      />
+    )
+
+    const latexSelect = screen.getByLabelText('Template') as HTMLSelectElement
+    expect(latexSelect.value).toBe('moderncv-banking')
+    expect(latexSelect.options).toHaveLength(4)
+  })
+
+  it('rewrites the YAML when a template is selected', () => {
+    const onYamlChange = vi.fn()
+    const yaml = 'layouts:\n  - engine: html\n    template: calm\n'
+    const resumeWithLayouts = {
+      ...mockResume,
+      layouts: [{ engine: 'html', template: 'calm' }],
+    } as unknown as Resume
+
+    render(
+      <PreviewPanel
+        activeLayoutIndex={0}
+        setActiveLayoutIndex={vi.fn()}
+        resume={resumeWithLayouts}
+        tooltips={tooltips}
+        yaml={yaml}
+        onYamlChange={onYamlChange}
+      />
+    )
+
+    fireEvent.change(screen.getByLabelText('Template'), {
+      target: { value: 'vscode' },
+    })
+
+    expect(onYamlChange).toHaveBeenCalledWith(
+      'layouts:\n  - engine: html\n    template: vscode\n'
+    )
   })
 })

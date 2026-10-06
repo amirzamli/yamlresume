@@ -22,7 +22,13 @@
  * IN THE SOFTWARE.
  */
 
-import { cleanup, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { DEFAULT_RESUME, getResumeRenderer } from '@yamlresume/core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CodeViewerProps } from './CodeViewer'
@@ -84,6 +90,14 @@ describe(ResumeViewer, () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Tests below override the renderer; clearAllMocks does not reset the
+    // implementation, so restore the shared default here.
+    vi.mocked(getResumeRenderer).mockImplementation(
+      () =>
+        ({ render: () => 'rendered content' }) as unknown as ReturnType<
+          typeof getResumeRenderer
+        >
+    )
   })
 
   afterEach(() => {
@@ -105,6 +119,186 @@ describe(ResumeViewer, () => {
     expect(screen.getByTestId('code-content').textContent).toBe(
       'rendered content'
     )
+  })
+
+  describe('LaTeX PDF preview', () => {
+    const tooltips = {
+      source: 'Source',
+      pdf: 'PDF',
+      compiling: 'Compiling PDF...',
+    }
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46])
+
+    beforeEach(() => {
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:pdf')
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    })
+
+    it('hides the toggle without a compiler', () => {
+      render(<ResumeViewer resume={validResume} layoutIndex={1} />)
+      expect(screen.queryByRole('button')).toBeNull()
+    })
+
+    it('compiles and renders the PDF when toggled', async () => {
+      const compileLatex = vi.fn().mockResolvedValue(pdfBytes)
+
+      render(
+        <ResumeViewer
+          resume={validResume}
+          layoutIndex={1}
+          compileLatex={compileLatex}
+          tooltips={tooltips}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button'))
+
+      await waitFor(() => {
+        expect(screen.getByTitle('PDF preview')).toBeDefined()
+      })
+
+      expect(compileLatex).toHaveBeenCalledWith('rendered content')
+      expect(screen.queryByTestId('code-viewer-mock')).toBeNull()
+    })
+
+    it('toggles back to the TeX source', async () => {
+      render(
+        <ResumeViewer
+          resume={validResume}
+          layoutIndex={1}
+          compileLatex={vi.fn().mockResolvedValue(pdfBytes)}
+          tooltips={tooltips}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button'))
+      await waitFor(() => screen.getByTitle('PDF preview'))
+
+      fireEvent.click(screen.getByRole('button'))
+
+      expect(screen.queryByTitle('PDF preview')).toBeNull()
+      expect(screen.getByTestId('code-viewer-mock')).toBeDefined()
+    })
+
+    it('shows a compiling overlay over a stale PDF when the source changes', async () => {
+      let resolveFirst: (bytes: Uint8Array) => void = () => {}
+      const compileLatex = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<Uint8Array>((resolve) => {
+              resolveFirst = resolve
+            })
+        )
+        .mockResolvedValue(pdfBytes)
+
+      const { rerender } = render(
+        <ResumeViewer
+          resume={validResume}
+          layoutIndex={1}
+          compileLatex={compileLatex}
+          tooltips={tooltips}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button'))
+
+      // Resolve the first compile, putting a PDF on screen.
+      resolveFirst(pdfBytes)
+      await waitFor(() => screen.getByTitle('PDF preview'))
+      expect(screen.queryByTestId('pdf-compiling-indicator')).toBeNull()
+
+      // Rendering now yields different TeX, which retriggers the compile while
+      // the previous PDF is still on screen.
+      vi.mocked(getResumeRenderer).mockImplementation(
+        (resume: unknown) =>
+          ({
+            render: () =>
+              (resume as { basics: { name: string } }).basics.name === 'Red'
+                ? 'new rendered content'
+                : 'rendered content',
+          }) as unknown as ReturnType<typeof getResumeRenderer>
+      )
+
+      const changedResume = {
+        ...validResume,
+        basics: { name: 'Red' },
+      } as unknown as typeof validResume
+
+      rerender(
+        <ResumeViewer
+          resume={changedResume}
+          layoutIndex={1}
+          compileLatex={compileLatex}
+          tooltips={tooltips}
+        />
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pdf-compiling-indicator')).toBeDefined()
+      })
+
+      expect(screen.getByTitle('PDF preview')).toBeDefined()
+      expect(compileLatex).toHaveBeenLastCalledWith('new rendered content')
+    })
+
+    it('drops the previous PDF when the layout changes', async () => {
+      const compileLatex = vi.fn().mockResolvedValue(pdfBytes)
+
+      const { rerender } = render(
+        <ResumeViewer
+          resume={validResume}
+          layoutIndex={1}
+          compileLatex={compileLatex}
+          tooltips={tooltips}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button'))
+      await waitFor(() => screen.getByTitle('PDF preview'))
+
+      rerender(
+        <ResumeViewer
+          resume={validResume}
+          layoutIndex={3}
+          compileLatex={compileLatex}
+          tooltips={tooltips}
+        />
+      )
+
+      expect(screen.queryByTitle('PDF preview')).toBeNull()
+      expect(screen.getByTestId('code-viewer-mock')).toBeDefined()
+      expect(screen.queryByRole('button')).toBeNull()
+    })
+
+    it('reports compilation failures', async () => {
+      render(
+        <ResumeViewer
+          resume={validResume}
+          layoutIndex={1}
+          compileLatex={vi.fn().mockRejectedValue(new Error('missing brace'))}
+          tooltips={tooltips}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button'))
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe('missing brace')
+      })
+    })
+
+    it('does not offer the toggle for non-LaTeX layouts', () => {
+      render(
+        <ResumeViewer
+          resume={validResume}
+          layoutIndex={3}
+          compileLatex={vi.fn()}
+          tooltips={tooltips}
+        />
+      )
+      expect(screen.queryByRole('button')).toBeNull()
+    })
   })
 
   it('renders DOCX preview correctly', () => {

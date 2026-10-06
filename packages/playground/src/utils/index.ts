@@ -23,6 +23,12 @@
  */
 
 export {
+  getLayoutTemplate,
+  getTemplatesForEngine,
+  setLayoutTemplate,
+  type TemplateOption,
+} from './templates'
+export {
   copyResumeToClipboard,
   downloadResume,
   getBasename,

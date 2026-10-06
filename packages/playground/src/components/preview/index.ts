@@ -25,5 +25,10 @@
 export { CodeViewer, type CodeViewerProps } from './CodeViewer'
 export { DocxViewer, type DocxViewerProps } from './DocxViewer'
 export { HtmlViewer, type HtmlViewerProps } from './HtmlViewer'
+export { PdfViewer, type PdfViewerProps } from './PdfViewer'
 export { PreviewPanel, type PreviewPanelProps } from './PreviewPanel'
 export { ResumeViewer, type ResumeViewerProps } from './ResumeViewer'
+export {
+  TemplateSelector,
+  type TemplateSelectorProps,
+} from './TemplateSelector'
